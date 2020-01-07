@@ -12,6 +12,7 @@ app.use(cors());
 
 const PORT = 3001
 
+const saltRounds = 10;
 const url = 'mongodb://localhost:27017';
 const dbName = 'messenger';
 const options = {
@@ -19,9 +20,6 @@ const options = {
   // server: { socketOptions: { keepAlive: 1, connectTimeoutMS: 30000 } },
   // replset: { socketOptions: { keepAlive: 1, connectTimeoutMS: 30000 } }
 };
-
-
-const saltRounds = 10;
 
 const checkEmail = (db, email, callback) => {
   db.collection('login').find({email: email}).toArray((err, result) => {
@@ -61,14 +59,15 @@ app.post('/login', (req,res) => {
       if(valid) {
         db.collection('users').find({email: email}).toArray((err, result) => {
           if(err) { console.log(err) }
+          client.close();
           res.status(200).json(result[0]);
         });
       }
       else {
+        client.close();
         res.json(null);
       }
     })
-    // client.close();
   });
 })
 
@@ -78,7 +77,7 @@ app.post('/register', (req, res) => {
   bcrypt.hash(password, saltRounds, (err, hash) => {
     if(err) { console.log(err) }
 
-    MongoClient.connect(url, { useUnifiedTopology: true }, (err, client) => {
+    MongoClient.connect(url, options, (err, client) => {
       if(err) { console.log(err) }
       const db = client.db(dbName);
 
@@ -88,26 +87,45 @@ app.post('/register', (req, res) => {
           db.collection('login').insertOne({
             email: email,
             hash: hash
-          }, (err, result) => { if(err) console.log(err) });
+          }, (err, result) => {
+             if(err) { console.log(err) }
 
-          db.collection('users').insertOne({
-            name: name,
-            email: email,
-            status: true,
-            friends: [],
-            joined: Date()
-          }, (err, result) => { if(err) console.log(err) });
+             db.collection('users').insertOne({
+               name: name,
+               email: email,
+               status: true,
+               friends: [],
+               joined: Date()
+             }, (err, result) => {
+                if(err) { console.log(err) }
 
-          db.collection('users').find({email: email}).toArray((err, result) => {
-            if(err) { console.log(err) }
-            res.status(200).json(result[0]);
+                db.collection('users').find({email: email}).toArray((err, result) => {
+                  if(err) { console.log(err) }
+                  client.close();
+                  res.status(200).json(result[0]);
+                });
+             });
           });
         }
         else {
+          client.close();
           res.json(null);
         }
-        // client.close();
       })
+    });
+  });
+})
+
+app.post('/friends', (req, res) => {
+  const { email } = req.body
+  MongoClient.connect(url, options, (err, client) => {
+    if(err) { console.log(err) }
+    const db = client.db(dbName);
+
+    db.collection('users').find({email: {$ne: email}}).toArray((err, result) => {
+      if(err) { console.log(err) }
+      client.close();
+      res.status(200).json(result);
     });
   });
 })
