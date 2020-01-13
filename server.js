@@ -1,5 +1,6 @@
 const express = require('express');
 const MongoClient = require('mongodb').MongoClient;
+const { ObjectId } = require('mongodb');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
@@ -95,6 +96,7 @@ app.post('/register', (req, res) => {
                email: email,
                status: true,
                friends: [],
+               requests: [],
                joined: Date()
              }, (err, result) => {
                 if(err) { console.log(err) }
@@ -116,7 +118,59 @@ app.post('/register', (req, res) => {
   });
 })
 
-app.post('/friends', (req, res) => {
+app.post('/acceptRequest', (req, res) => {
+  const { id, name, user } = req.body;
+
+  MongoClient.connect(url, options, (err, client) => {
+    if(err) { console.log(err) }
+    const db = client.db(dbName);
+
+    db.collection('users').updateOne({_id: ObjectId(id)}, {$pull: {requests: {_id: user.id}}}, (err, result) => {
+        if(err) { console.log(err) }
+
+        db.collection('users').updateOne({_id: ObjectId(id)}, {$addToSet: {friends: {
+          _id: user.id,
+          name: user.name
+        }}}, (err, result) => {
+            if(err) { console.log(err) }
+
+            db.collection('users').updateOne({_id: ObjectId(user.id)}, {$addToSet: {friends: {
+              _id: id,
+              name: name
+            }}}, (err, result) => {
+                if(err) { console.log(err) }
+
+                db.collection('users').find({_id: ObjectId(id)}).toArray((err, result) => {
+                  if(err) { console.log(err) }
+
+                  client.close();
+                  res.status(200).json(result[0].friends);
+                });
+              });
+          });
+        });
+      })
+    })
+
+app.post('/sendRequest', (req, res) => {
+  const { email, user } = req.body;
+
+  MongoClient.connect(url, options, (err, client) => {
+    if(err) { console.log(err) }
+    const db = client.db(dbName);
+
+    db.collection('users').updateOne({email: email}, {$addToSet: {requests: {
+      _id: user.id,
+      name: user.name
+    }}}, (err, result) => {
+        if(err) { console.log(err) }
+        client.close();
+        res.status(200).json();
+    });
+  })
+})
+
+app.post('/users', (req, res) => {
   const { email } = req.body
   MongoClient.connect(url, options, (err, client) => {
     if(err) { console.log(err) }
