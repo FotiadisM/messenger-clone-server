@@ -5,6 +5,8 @@ const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
 
+const Chatkit = require('@pusher/chatkit-server');
+
 const app = express();
 
 app.use(bodyParser.urlencoded({ extended: false }))
@@ -14,6 +16,7 @@ app.use(cors());
 const PORT = 3001
 
 const saltRounds = 10;
+
 const url = 'mongodb://localhost:27017';
 const dbName = 'messenger';
 const options = {
@@ -21,6 +24,11 @@ const options = {
   // server: { socketOptions: { keepAlive: 1, connectTimeoutMS: 30000 } },
   // replset: { socketOptions: { keepAlive: 1, connectTimeoutMS: 30000 } }
 };
+
+const chatkit = new Chatkit.default({
+  instanceLocator: '',
+  key: ''
+})
 
 const checkEmail = (db, email, callback) => {
   db.collection('login').find({email: email}).toArray((err, result) => {
@@ -34,7 +42,7 @@ const checkEmail = (db, email, callback) => {
   });
 }
 
-const validateSignIn = (db, { email, password, }, callback) => {
+const validateSignIn = (db, { email, password }, callback) => {
   db.collection('login').find({email: email}).toArray((err, result) => {
     if(err) { console.log(err) }
     if(result.length === 0) {
@@ -48,6 +56,11 @@ const validateSignIn = (db, { email, password, }, callback) => {
     }
   });
 }
+
+app.post('/authenticate', (req, res) => {
+  const authData = chatkit.authenticate({ userId: req.query.user_id })
+  res.status(authData.status).send(authData.body)
+});
 
 app.post('/login', (req,res) => {
   const { email } = req.body;
@@ -103,6 +116,12 @@ app.post('/register', (req, res) => {
 
                 db.collection('users').find({email: email}).toArray((err, result) => {
                   if(err) { console.log(err) }
+
+                  chatkit.createUser({
+                    id: result[0]._id,
+                    name: result[0].name
+                  });
+
                   client.close();
                   res.status(200).json(result[0]);
                 });
@@ -126,31 +145,31 @@ app.post('/acceptRequest', (req, res) => {
     const db = client.db(dbName);
 
     db.collection('users').updateOne({_id: ObjectId(id)}, {$pull: {requests: {_id: user.id}}}, (err, result) => {
+      if(err) { console.log(err) }
+
+      db.collection('users').updateOne({_id: ObjectId(id)}, {$addToSet: {friends: {
+        _id: user.id,
+        name: user.name
+      }}}, (err, result) => {
         if(err) { console.log(err) }
 
-        db.collection('users').updateOne({_id: ObjectId(id)}, {$addToSet: {friends: {
-          _id: user.id,
-          name: user.name
+        db.collection('users').updateOne({_id: ObjectId(user.id)}, {$addToSet: {friends: {
+          _id: id,
+          name: name
         }}}, (err, result) => {
+          if(err) { console.log(err) }
+
+          db.collection('users').find({_id: ObjectId(id)}).toArray((err, result) => {
             if(err) { console.log(err) }
 
-            db.collection('users').updateOne({_id: ObjectId(user.id)}, {$addToSet: {friends: {
-              _id: id,
-              name: name
-            }}}, (err, result) => {
-                if(err) { console.log(err) }
-
-                db.collection('users').find({_id: ObjectId(id)}).toArray((err, result) => {
-                  if(err) { console.log(err) }
-
-                  client.close();
-                  res.status(200).json(result[0].friends);
-                });
-              });
+            client.close();
+            res.status(200).json({friends: result[0].friends, requests: result[0].requests});
           });
         });
-      })
-    })
+      });
+    });
+  })
+})
 
 app.post('/sendRequest', (req, res) => {
   const { email, user } = req.body;
@@ -176,11 +195,19 @@ app.post('/users', (req, res) => {
     if(err) { console.log(err) }
     const db = client.db(dbName);
 
-    db.collection('users').find({email: {$ne: email}}).toArray((err, result) => {
+    db.collection('users').find({email: email}).toArray((err, result) => {
       if(err) { console.log(err) }
-      client.close();
-      res.status(200).json(result);
-    });
+
+      friends = result[0].friends.map(user => {
+        return user.name;
+      });
+
+      db.collection('users').find({email: {$ne: email}, name: {$nin: friends}}).toArray((err, result) => {
+        if(err) { console.log(err) }
+        client.close();
+        res.status(200).json(result);
+      });
+    })
   });
 })
 
