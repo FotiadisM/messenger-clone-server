@@ -140,35 +140,47 @@ app.post('/register', (req, res) => {
 app.post('/acceptRequest', (req, res) => {
   const { id, name, user } = req.body;
 
-  MongoClient.connect(url, options, (err, client) => {
-    if(err) { console.log(err) }
-    const db = client.db(dbName);
+  chatkit.createRoom({
+    creatorId: id,
+    name: id,
+    isPrivate: true,
+    userIds: [id, user.id]
+  })
+  .then(room => {
 
-    db.collection('users').updateOne({_id: ObjectId(id)}, {$pull: {requests: {_id: user.id}}}, (err, result) => {
+    MongoClient.connect(url, options, (err, client) => {
       if(err) { console.log(err) }
-
-      db.collection('users').updateOne({_id: ObjectId(id)}, {$addToSet: {friends: {
-        _id: user.id,
-        name: user.name
-      }}}, (err, result) => {
+      const db = client.db(dbName);
+  
+      db.collection('users').updateOne({_id: ObjectId(id)}, {$pull: {requests: {_id: user.id}}}, (err, result) => {
         if(err) { console.log(err) }
-
-        db.collection('users').updateOne({_id: ObjectId(user.id)}, {$addToSet: {friends: {
-          _id: id,
-          name: name
+  
+        db.collection('users').updateOne({_id: ObjectId(id)}, {$addToSet: {friends: {
+          _id: user.id,
+          name: user.name,
+          roomId: room.id
         }}}, (err, result) => {
           if(err) { console.log(err) }
-
-          db.collection('users').find({_id: ObjectId(id)}).toArray((err, result) => {
+  
+          db.collection('users').updateOne({_id: ObjectId(user.id)}, {$addToSet: {friends: {
+            _id: id,
+            name: name,
+            roomId: room.id
+          }}}, (err, result) => {
             if(err) { console.log(err) }
-
-            client.close();
-            res.status(200).json({friends: result[0].friends, requests: result[0].requests});
+  
+            db.collection('users').find({_id: ObjectId(id)}).toArray((err, result) => {
+              if(err) { console.log(err) }
+  
+              client.close();
+              res.status(200).json({friends: result[0].friends, requests: result[0].requests});
+            });
           });
         });
       });
-    });
+    })
   })
+
 })
 
 app.post('/sendRequest', (req, res) => {
