@@ -13,18 +13,22 @@ app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json());
 app.use(cors());
 
-const PORT = 3001
-
+const PORT = process.env.PORT || 3001
 const saltRounds = 10;
 
-// const url = 'mongodb://localhost:27017';
-const url = 'mongodb://127.0.0.1:27017';
+const uri = '';
 const dbName = 'messenger';
 const options = {
-  useUnifiedTopology: true
-  // server: { socketOptions: { keepAlive: 1, connectTimeoutMS: 30000 } },
-  // replset: { socketOptions: { keepAlive: 1, connectTimeoutMS: 30000 } }
+  useNewUrlParser: true,
+  // useUnifiedTopology: true
 };
+
+// const client = new MongoClient(uri, options);
+// client.connect(err => {
+//   const collection = client.db("messenger").collection("login");
+//   console.log("hey");
+//   client.close();
+// });
 
 const chatkit = new Chatkit.default({
   instanceLocator: '',
@@ -66,7 +70,7 @@ app.post('/authenticate', (req, res) => {
 app.post('/login', (req,res) => {
   const { email } = req.body;
 
-  MongoClient.connect(url, options, (err, client) => {
+  MongoClient.connect(uri, options, (err, client) => {
     if(err) { console.log(err) }
     const db = client.db(dbName);
 
@@ -92,7 +96,7 @@ app.post('/register', (req, res) => {
   bcrypt.hash(password, saltRounds, (err, hash) => {
     if(err) { console.log(err) }
 
-    MongoClient.connect(url, options, (err, client) => {
+    MongoClient.connect(uri, options, (err, client) => {
       if(err) { console.log(err) }
       const db = client.db(dbName);
 
@@ -149,7 +153,7 @@ app.post('/acceptRequest', (req, res) => {
   })
   .then(room => {
 
-    MongoClient.connect(url, options, (err, client) => {
+    MongoClient.connect(uri, options, (err, client) => {
       if(err) { console.log(err) }
       const db = client.db(dbName);
   
@@ -187,7 +191,7 @@ app.post('/acceptRequest', (req, res) => {
 app.post('/sendRequest', (req, res) => {
   const { email, user } = req.body;
 
-  MongoClient.connect(url, options, (err, client) => {
+  MongoClient.connect(uri, options, (err, client) => {
     if(err) { console.log(err) }
     const db = client.db(dbName);
 
@@ -204,7 +208,9 @@ app.post('/sendRequest', (req, res) => {
 
 app.post('/users', (req, res) => {
   const { email } = req.body
-  MongoClient.connect(url, options, (err, client) => {
+
+  MongoClient.connect(uri, options, (err, client) => {
+
     if(err) { console.log(err) }
     const db = client.db(dbName);
 
